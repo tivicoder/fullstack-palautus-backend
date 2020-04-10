@@ -1,5 +1,6 @@
 const express = require('express')
 const app = express()
+app.use(express.json())
 
 let persons = [
   {
@@ -47,6 +48,25 @@ app.delete('/api/persons/:id', (request, response) => {
 app.get('/api/info', (request, response) => {
    response.send(`<div>Phonebook has info for ${persons.length} people</div><br/>` + 
             `<div>${Date()}</div>`)
+})
+
+app.post('/api/persons', (request, response) => {
+  const newPerson = request.body
+
+  // reject if name or number is empty
+  if (!newPerson.name || !newPerson.number) {
+    return response.status(400).json({error: 'name or number missing'})
+  }
+
+  // reject if name exists
+  if (persons.find(person => person.name === newPerson.name)) {
+    return response.status(400).json({error: 'name must be unique'})
+  }
+
+  newPerson.id = Math.floor(Math.random()*10000)
+  persons = persons.concat(newPerson)
+
+  response.json(newPerson)
 })
 
 const PORT = 3001
