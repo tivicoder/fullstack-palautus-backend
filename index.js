@@ -12,6 +12,7 @@ app.use(morgan('tiny', {
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :content', {
   skip: function (req, res) { return req.method !== "POST" }
 }))
+app.use(express.static('build'))
 
 let persons = [
   {
