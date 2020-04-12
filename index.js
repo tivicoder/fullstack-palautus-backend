@@ -14,56 +14,80 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :c
 }))
 app.use(express.static('build'))
 
-let persons = [
-  {
-    "name": "Arto Hellas",
-    "number": "040-123456",
-    "id": 1
-  },
-  {
-    "name": "Ada Lovelace",
-    "number": "39-44-5323523",
-    "id": 2
-  },
-  {
-    "name": "Dan Abramov",
-    "number": "12-43-234345",
-    "id": 3
-  },
-  {
-    "name": "Mary Poppendieck",
-    "number": "39-23-6423122",
-    "id": 4
+
+
+const mongoose = require('mongoose')
+
+const url = process.env.MONGODB_URI
+
+mongoose
+  .connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(result => {
+    console.log('connected to MongoDB')
+  })
+  .catch((error) => {
+    console.log('error connecting to MongoDB:', error.message)
+  })
+
+
+const personSchema = new mongoose.Schema({
+  name: String,
+  number: String
+})
+personSchema.set('toJSON', {
+  transform: (document, returnedObject) => {
+    returnedObject.id = returnedObject._id.toString()
+    delete returnedObject._id
+    delete returnedObject.__v
   }
-]
+})
+
+const Person = mongoose.model('Person', personSchema)
+
+
+
+let personsCache = []
 
 app.get('/api/persons', (request, response) => {
-  response.json(persons)
+  Person.find({}).then(persons => {
+    personsCache = persons.map(person => person.toJSON())
+    console.log(personsCache)
+    response.json(personsCache)
+  })
 })
 
 app.get('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id)
-  const person = persons.find(person => person.id === id)
-  if (person) {
-    response.json(person)
-  } else {
-    response.status(404).end()
-  }
+  // TODO: add exception handling for not found person
+  Person.findById(request.params.id).then(person => {
+    console.log('person: ', person)
+    if (person) {
+      response.json(person.toJSON())
+    } else {
+      response.status(404).end()
+    }
+  })
 })
 
 app.delete('/api/persons/:id', (request, response) => {
   const id = Number(request.params.id)
-  persons = persons.filter(note => note.id !== id)
-  response.status(204).end()
+  Person.findByIdAndDelete(request.params.id).then(person => {
+    console.log('removed')
+    response.status(204).end()
+  })
 })
 
 app.get('/api/info', (request, response) => {
-   response.send(`<div>Phonebook has info for ${persons.length} people</div><br/>` + 
-            `<div>${Date()}</div>`)
+  Person.find({}).then(persons => {
+    response.send(`<div>Phonebook has info for ${persons.length} people</div><br/>` + 
+    `<div>${Date()}</div>`)
+  })
 })
 
 app.post('/api/persons', (request, response) => {
-  const newPerson = request.body
+  const newPerson = new Person({
+    name: request.body.name,
+    number:  request.body.number
+  })
 
   // reject if name or number is empty
   if (!newPerson.name || !newPerson.number) {
@@ -71,14 +95,16 @@ app.post('/api/persons', (request, response) => {
   }
 
   // reject if name exists
-  if (persons.find(person => person.name === newPerson.name)) {
+  if (personsCache.find(person => person.name === newPerson.name)) {
     return response.status(400).json({error: 'name must be unique'})
   }
 
-  newPerson.id = Math.floor(Math.random()*10000)
-  persons = persons.concat(newPerson)
-
-  response.json(newPerson)
+  newPerson.save().then(savedPerson => {
+    savedPerson = savedPerson.toJSON()
+    personsCache = personsCache.concat(savedPerson)
+    console.log('new persons: ', personsCache)
+    response.json(savedPerson)
+  })
 })
 
 const PORT = process.env.PORT || 3001
