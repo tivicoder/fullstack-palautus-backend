@@ -55,11 +55,6 @@ app.post('/api/persons', (request, response, next) => {
     number:  request.body.number
   })
 
-  // reject if name or number is empty
-  if (!newPerson.name || !newPerson.number) {
-    return response.status(400).json({error: 'name or number missing'})
-  }
-
   newPerson.save()
     .then(savedPerson => response.json(savedPerson.toJSON()))
     .catch(error => next(error))
