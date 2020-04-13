@@ -6,12 +6,12 @@ const cors = require('cors')
 
 app.use(express.json())
 app.use(cors())
-morgan.token('content', function (req, res) { return JSON.stringify(req.body) })
+morgan.token('content', function (req) { return JSON.stringify(req.body) })
 app.use(morgan('tiny', {
-  skip: function (req, res) { return req.method === "POST" }
+  skip: function (req) { return req.method === 'POST' }
 }))
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :content', {
-  skip: function (req, res) { return req.method !== "POST" }
+  skip: function (req) { return req.method !== 'POST' }
 }))
 app.use(express.static('build'))
 
@@ -36,15 +36,14 @@ app.get('/api/persons/:id', (request, response, next) => {
 })
 
 app.delete('/api/persons/:id', (request, response, next) => {
-  const id = Number(request.params.id)
   Person.findByIdAndRemove(request.params.id)
-    .then(person => response.status(204).end())
+    .then(() => response.status(204).end())
     .catch(error => next(error))
 })
 
 app.get('/api/info', (request, response) => {
   Person.find({}).then(persons => {
-    response.send(`<div>Phonebook has info for ${persons.length} people</div><br/>` + 
+    response.send(`<div>Phonebook has info for ${persons.length} people</div><br/>` +
     `<div>${Date()}</div>`)
   })
 })
