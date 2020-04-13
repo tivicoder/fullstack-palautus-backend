@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const app = express()
 const morgan = require('morgan')
@@ -14,66 +15,31 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :c
 }))
 app.use(express.static('build'))
 
-
-
-const mongoose = require('mongoose')
-
-const url = process.env.MONGODB_URI
-
-mongoose
-  .connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(result => {
-    console.log('connected to MongoDB')
-  })
-  .catch((error) => {
-    console.log('error connecting to MongoDB:', error.message)
-  })
-
-
-const personSchema = new mongoose.Schema({
-  name: String,
-  number: String
-})
-personSchema.set('toJSON', {
-  transform: (document, returnedObject) => {
-    returnedObject.id = returnedObject._id.toString()
-    delete returnedObject._id
-    delete returnedObject.__v
-  }
-})
-
-const Person = mongoose.model('Person', personSchema)
-
-
-
-let personsCache = []
+const Person = require('./models/person')
 
 app.get('/api/persons', (request, response) => {
   Person.find({}).then(persons => {
-    personsCache = persons.map(person => person.toJSON())
-    console.log(personsCache)
-    response.json(personsCache)
+    response.json(persons.map(person => person.toJSON()))
   })
 })
 
-app.get('/api/persons/:id', (request, response) => {
-  // TODO: add exception handling for not found person
-  Person.findById(request.params.id).then(person => {
-    console.log('person: ', person)
-    if (person) {
-      response.json(person.toJSON())
-    } else {
-      response.status(404).end()
-    }
-  })
+app.get('/api/persons/:id', (request, response, next) => {
+  Person.findById(request.params.id)
+    .then(person => {
+      if (person) {
+        response.json(person.toJSON())
+      } else {
+        response.status(404).send({ error: 'id not found' })
+      }
+    })
+    .catch(error => next(error))
 })
 
-app.delete('/api/persons/:id', (request, response) => {
+app.delete('/api/persons/:id', (request, response, next) => {
   const id = Number(request.params.id)
-  Person.findByIdAndDelete(request.params.id).then(person => {
-    console.log('removed')
-    response.status(204).end()
-  })
+  Person.findByIdAndRemove(request.params.id)
+    .then(person => response.status(204).end())
+    .catch(error => next(error))
 })
 
 app.get('/api/info', (request, response) => {
@@ -83,7 +49,7 @@ app.get('/api/info', (request, response) => {
   })
 })
 
-app.post('/api/persons', (request, response) => {
+app.post('/api/persons', (request, response, next) => {
   const newPerson = new Person({
     name: request.body.name,
     number:  request.body.number
@@ -94,20 +60,42 @@ app.post('/api/persons', (request, response) => {
     return response.status(400).json({error: 'name or number missing'})
   }
 
-  // reject if name exists
-  if (personsCache.find(person => person.name === newPerson.name)) {
-    return response.status(400).json({error: 'name must be unique'})
-  }
+  Person.find({})
+    .then(persons => {
+      // reject if name exists. Note, client should send PUT in this case
+      // so maybe this check is not needed anymore?
+      persons = persons.map(person => person.toJSON())
+      if (persons.find(person => person.name === newPerson.name)) {
+        return response.status(400).json({error: 'name must be unique'})
+      }
 
-  newPerson.save().then(savedPerson => {
-    savedPerson = savedPerson.toJSON()
-    personsCache = personsCache.concat(savedPerson)
-    console.log('new persons: ', personsCache)
-    response.json(savedPerson)
-  })
+      newPerson.save()
+        .then(savedPerson => response.json(savedPerson.toJSON()))
+        .catch(error => next(error))
+    })
 })
 
-const PORT = process.env.PORT || 3001
+app.put('/api/persons/:id', (request, response, next) => {
+  const person = {
+    name: request.body.name,
+    number: request.body.number,
+  }
+
+  Person.findByIdAndUpdate(request.params.id, person, { new: true })
+    .then(updatedPerson => response.json(updatedPerson.toJSON()))
+    .catch(error => next(error))
+})
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  }
+  next(error)
+}
+app.use(errorHandler)
+
+const PORT = process.env.PORT
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
