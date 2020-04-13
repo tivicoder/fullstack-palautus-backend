@@ -60,19 +60,9 @@ app.post('/api/persons', (request, response, next) => {
     return response.status(400).json({error: 'name or number missing'})
   }
 
-  Person.find({})
-    .then(persons => {
-      // reject if name exists. Note, client should send PUT in this case
-      // so maybe this check is not needed anymore?
-      persons = persons.map(person => person.toJSON())
-      if (persons.find(person => person.name === newPerson.name)) {
-        return response.status(400).json({error: 'name must be unique'})
-      }
-
-      newPerson.save()
-        .then(savedPerson => response.json(savedPerson.toJSON()))
-        .catch(error => next(error))
-    })
+  newPerson.save()
+    .then(savedPerson => response.json(savedPerson.toJSON()))
+    .catch(error => next(error))
 })
 
 app.put('/api/persons/:id', (request, response, next) => {
@@ -90,7 +80,10 @@ const errorHandler = (error, request, response, next) => {
   console.error(error.message)
   if (error.name === 'CastError') {
     return response.status(400).send({ error: 'malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
   }
+
   next(error)
 }
 app.use(errorHandler)
